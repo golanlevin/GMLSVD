@@ -7,7 +7,6 @@ TODO
 -- draw query 
 -- 3d/2d switch
 -- arcball
-
 */
 
 import Jama.*; 
@@ -27,7 +26,7 @@ int  nProjectionDimensions;
 
 
 
-float   svdDrawRectX = 40;
+float   svdDrawRectX = 50;
 float   svdDrawRectY = 460;
 float   svdDrawRectW = 500;
 float   svdDrawRectH = 500;
