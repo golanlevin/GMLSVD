@@ -3,6 +3,7 @@
 
 
 
+//==================================================
 class Datum {
   
   int nValues;
@@ -12,9 +13,7 @@ class Datum {
   float[] projectedPoint; // the coordinate of the Datum in the new projective space. 
   float[] displayPoint;   // the location of the Datum on-screen. 
   
-  Datum mySimilars[];
-
-
+  
   //-------------------------------------------
   Datum (int n, int ndp) {
     nValues = n;

@@ -25,14 +25,17 @@ float[] projectedDataMaxBounds;
 float[] displayPoint;
 int  nProjectionDimensions; 
 
-
+ArrayList<SVDDatum3D> SVDData;
+Bounds projectedSvdDataBounds[];
 
 float   svdDrawRectX = 40;
-float   svdDrawRectY = 460;
-float   svdDrawRectW = 500;
-float   svdDrawRectH = 500;
+float   svdDrawRectY = 500;
+float   svdDrawRectW = 400;
+float   svdDrawRectH = 400;
 float   svdDrawRectR = svdDrawRectX + svdDrawRectW;
 float   svdDrawRectB = svdDrawRectY + svdDrawRectH;
+float   svdDrawRectZ0 =  100;
+float   svdDrawRectZ1 = -100;
 
 boolean bViewComparison = false;
 String  mouseFileName = ""; 
@@ -84,7 +87,7 @@ String fieldNames[] = {
 
 // not 2,8,9,10,11,13,14
 int fieldSwitches[] = {
-  1, 3, 4, 5, 6, 7, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36
+  1, 3, 4, 5, 6, 7, 12, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36
 };
 
 int recenterMeanOnZero[] = {
@@ -181,57 +184,50 @@ int yFieldIndex = 1;
 
 //=====================================================================================
 void setup() {
-  size(1000, 1000);
-  // noLoop();
-  textMode(SCREEN);
-
   nProjectionDimensions  = 2;
-  projectedDataMinBounds = new float[nProjectionDimensions];
-  projectedDataMaxBounds = new float[nProjectionDimensions];
-  displayPoint           = new float[nProjectionDimensions]; 
+  if (nProjectionDimensions == 2){
+    size(1000, 1000);
+  } else if (nProjectionDimensions == 3) {
+    size(1000, 1000, P3D);
+  }
+  
+  textMode(SCREEN);
+  displayPoint = new float[nProjectionDimensions]; 
 
 
   nTotalFields = fieldSwitches.length;
   DatumList = new ArrayList<Datum>(); 
 
-  loadGMLAnalysisFile();
 
   DatumsSimilarToCurrentTag = new ArrayList<Datum>(); 
   TagsSimilarToCurrentTag   = new ArrayList<GMLTag>();
 
-
-  computeBoundsAndStatsForAllDatumFields();
-  constrainAnalysisOutliers();
-  computeBoundsAndStatsForAllDatumFields();
-
-  // populate raw data array, for further processing
-  int nDatums = DatumList.size(); // count of the above
-  int nValues = nTotalFields; // values per Datum
-  matrixRawData = new double[nValues][nDatums];
-
-  for (int d=0; d<nDatums; d++) {
-    Datum aDatum = (Datum)DatumList.get(d);
-    for (int v=0; v<nValues; v++) {
-      matrixRawData[v][d] = (double) aDatum.getValue(v); // transposing happens here.
-    }
+  // Pretending to be the server ------------------------------------------------------------
+  loadGMLAnalysisFile();               // Obtain the Tag analyses, the 36 metrics.
+  preprocessDatumsForSvd();            // Compute the metrics' stdev's and constrain outliers
+  performSvdAndSaveSvdAnalysisFile();  // Perform SVD and save the "_SVDAnalysis.tsv";
+  
+  // This is the client ---------------------------------------------------------------------
+  loadSvdAnalysisFile();               // Load "_SVDAnalysis.tsv"; populate SVDData
+  computeProjectedSvdBounds();         // Compute the bounds, for display purposes. 
+  computeSvdDisplayCoordinates();      // Within those bounds, map the data for displauy.
+  
+  
+  
+  // This is only if we intend to plot the data according to individual metrics
+  boolean bDiagnostic = true;
+  if (bDiagnostic){
+    computeBoundsAndStatsForAllDatumFields();
   }
 
-
-
-
-  // compute the SVD
-  m = new Matrix (matrixRawData);
-  long svd0 = millis();
-  svd = new SingularValueDecomposition(m); // m.transpose()
-  long svd1 = millis();
-  println("svd took " + (svd1-svd0));
 }
+
 
 
 
 //=====================================================================================
 void loadGMLAnalysisFile() {
-  // this loads the "ANALYSIS" file which synopsizes the ~35 different statistical metrics of the marks. 
+  // this loads the "ANALYSIS" file which synopsizes the ~36 different statistical metrics of the marks. 
 
   float inVals[] = new float[nTotalFields]; 
 
@@ -277,9 +273,6 @@ void loadGMLAnalysisFile() {
       nFaulty++;
     }
 
-
-
-
     if (bGMLAnalysisIsOK) {
       Datum D = new Datum (gmlFilename, nProjectionDimensions, inVals);
       DatumList.add (D);
@@ -288,6 +281,7 @@ void loadGMLAnalysisFile() {
   println("nLines = " + nLines);
   println("nFaulty = " + nFaulty);
 }
+
 
 
 //=====================================================================================
@@ -331,7 +325,7 @@ void computeBoundsAndStatsForAllDatumFields() {
 
     fieldBoundsArray[i].name = fieldNames[fieldSwitches[i]];
     fieldBoundsArray[i].set(fieldSwitches[i], fieldMin, fieldMax, fieldMean, fieldStdv); 
-    fieldBoundsArray[i].print();
+    // fieldBoundsArray[i].print();
   }
 }
 
@@ -339,7 +333,7 @@ void computeBoundsAndStatsForAllDatumFields() {
 //=====================================================================================
 void constrainAnalysisOutliers() {
 
-  float maxStdvs = 3.0;
+  float maxStdvs = 4.0;
 
   int nDatums = DatumList.size();
   for (int d=0; d<nDatums; d++) {
@@ -353,8 +347,6 @@ void constrainAnalysisOutliers() {
       float hiOutlier = mean + maxStdvs * stdv;
       float loOutlier = mean - maxStdvs * stdv;
       
-      
-     
       aVal = constrain(aVal, loOutlier, hiOutlier); 
       if (recenterMeanOnZero[fieldSwitches[j]] > 0){
          aVal = map(aVal, loOutlier,hiOutlier, 0,1); 
@@ -485,28 +477,6 @@ void drawFieldFieldComparison() {
 }
 
 
-//=====================================================================================
-void getMouseFilename() {
-  mouseFileName = ""; 
-
-  float minDist = 99999; 
-  int nDatums = DatumList.size();
-  for (int d=0; d<nDatums; d++) {
-    Datum aDatum = (Datum)DatumList.get(d);
-    float posx = aDatum.displayPoint[0];
-    float posy = aDatum.displayPoint[1];
-    float dx = mouseX - posx;
-    float dy = mouseY - posy;
-    float dh2 = dx*dx + dy*dy; 
-    if (dh2 < 16) {
-      if (dh2 < minDist) {
-        minDist = dh2;
-        mouseFileName = aDatum.name + ".gml";
-        theCurrentDatumId = d;
-      }
-    }
-  }
-}
 
 
 void searchForSimilarDatums () {
@@ -718,20 +688,12 @@ void draw() {
     getMouseFilename();
   } 
   else {
-    // draw SVD 2D view
-    Matrix v                 = svd.getV();
-    double[][] projectedData = v.getArray(); 
-    int nDatums              = DatumList.size();
-
-    extractAndCaptureProjectedData (projectedData, nDatums); 
-    computeProjectedDataBounds (); 
-    computeDisplayCoordinates ();
-    displayProjectedPoints ();
+    displayProjectedSvdPoints ();
+    displayProjectedSvdAxes ();
     getMouseFilename ();
   }
 
-  // fill(0); 
-  // text (nLoadedSimilarTags, 500, 50); 
+
 
   if (theCurrentTag != null) {
     drawCurrentTag();
@@ -743,117 +705,6 @@ void draw() {
   rect(svdDrawRectX, svdDrawRectY, svdDrawRectW, svdDrawRectH);
 }
 
-//=====================================================================================
-void extractAndCaptureProjectedData (double[][] projectedData, int nDatums) {
-  // let each Datum know where it is projected into the new space. 
-  for (int d=0; d<nDatums; d++) {
-    double[] p = projectedData[d];
-    ((Datum)DatumList.get(d)).setProjectedPoint(p, nProjectionDimensions);
-  }
-}
-
-
-//=====================================================================================
-void computeProjectedDataBounds () {
-
-  // compute the min/max bounds of the projected data ...for display purposes.
-  int nDatums = DatumList.size();
-  for (int n=0; n<nProjectionDimensions; n++) {
-    float minVal = 99999;
-    float maxVal =-99999;
-
-    for (int d=0; d<nDatums; d++) {
-      float[] p = ((Datum)DatumList.get(d)).getProjectedPoint();
-      float dataVal = p[n]; 
-      if (dataVal < minVal) {
-        minVal = dataVal;
-      }
-      if (dataVal > maxVal) {
-        maxVal = dataVal;
-      }
-    }
-    projectedDataMinBounds[n] = minVal; 
-    projectedDataMaxBounds[n] = maxVal;
-  }
-}
-
-//=====================================================================================
-void computeDisplayCoordinates() {
-
-  // For display purposes
-  float minX = projectedDataMinBounds[0];
-  float minY = projectedDataMinBounds[1]; 
-  float maxX = projectedDataMaxBounds[0]; 
-  float maxY = projectedDataMaxBounds[1]; 
-
-  int nDatums = DatumList.size();
-  for (int d=0; d<nDatums; d++) {
-    Datum aDatum = (Datum) DatumList.get(d);
-
-    float[] projectedPoint = aDatum.getProjectedPoint();
-    float dataX = projectedPoint[0];
-    float dataY = projectedPoint[1]; 
-    
-    //
-    boolean bWarp = false; 
-    if (bWarp){
-      displayPoint[0] = map(dataX, minX, maxX, 0, 1);
-      displayPoint[1] = map(dataY, minY, maxY, 0, 1);
-      
-      displayPoint[0] = doubleExponentialSigmoid (displayPoint[0], 0.3); 
-      displayPoint[1] = doubleExponentialSigmoid (displayPoint[1], 0.3); 
-      displayPoint[0] = pow(displayPoint[0],  mouseX/(float)(width/2));
-      displayPoint[1] = pow(displayPoint[1],  mouseY/(float)(height/2));
-      displayPoint[0] = map(displayPoint[0], 0, 1, svdDrawRectR, svdDrawRectX);
-      displayPoint[1] = map(displayPoint[1], 0, 1, svdDrawRectY, svdDrawRectB);
-      
-    } else {
-      displayPoint[0] = map(dataX, minX, maxX, svdDrawRectR, svdDrawRectX);
-      displayPoint[1] = map(dataY, minY, maxY, svdDrawRectY, svdDrawRectB);
-    }
-    
-    aDatum.setDisplayPoint(displayPoint, 2);
-  }
-}
-
-
-
-//=====================================================================================
-void displayProjectedPoints() {
-
-  noStroke();
-  noSmooth();
-  fill(0, 0, 128, 128);
-  smooth();
-
-  int nDatums = DatumList.size();
-  for (int d=0; d<nDatums; d++) {
-    Datum aDatum = (Datum) DatumList.get(d);
-
-    float[] displayPoint = aDatum.getDisplayPoint();  
-    float plotX = displayPoint[0];
-    float plotY = displayPoint[1];
-
-
-    ellipse(plotX, plotY, 7, 7); 
-
-
-    //fill (0, 0, 128, 48); 
-    //String name = ((Datum)DatumList.get(d)).name;
-    //text(name, plotX, plotY-10);
-  }
-
-  // draw axes projected into SVD space.
-  float minX = projectedDataMinBounds[0];
-  float minY = projectedDataMinBounds[1]; 
-  float maxX = projectedDataMaxBounds[0]; 
-  float maxY = projectedDataMaxBounds[1]; 
-  float x0 = map(0, minX, maxX, svdDrawRectR, svdDrawRectX);
-  float y0 = map(0, minY, maxY, svdDrawRectY, svdDrawRectB);
-  stroke(0);
-  line (x0, svdDrawRectY, x0, svdDrawRectB);
-  line (svdDrawRectX, y0, svdDrawRectR, y0);
-}
 
 
 

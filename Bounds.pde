@@ -8,6 +8,13 @@ class Bounds {
   float  mean;
   float  stdv;
   
+  Bounds (){
+    name = ""; 
+    id = 0; 
+    low = high = 0.0;
+    mean = stdv = 0.0; 
+  }
+  
   void set(int i, float l, float h){ 
     id = i;
     low = l;
@@ -22,8 +29,9 @@ class Bounds {
     stdv = s; 
   }
   
-  
   void print(){
     println("Bound "+ id + ":\t" + name +  "\t" + low + "\t" + high + "\t" + mean + "\t" + stdv); 
   }
 }
+
+
