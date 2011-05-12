@@ -7,7 +7,6 @@ TODO
 -- draw query 
 -- 3d/2d switch
 -- arcball
-
 */
 
 import Jama.*; 
@@ -27,6 +26,7 @@ int  nProjectionDimensions;
 
 ArrayList<SVDDatum3D> SVDData;
 Bounds projectedSvdDataBounds[];
+
 
 float   svdDrawRectX = 40;
 float   svdDrawRectY = 500;
