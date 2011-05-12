@@ -1,0 +1,3 @@
+class TagRecorder {
+  int foo; 
+}
