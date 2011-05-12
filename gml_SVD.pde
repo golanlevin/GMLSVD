@@ -27,7 +27,7 @@ int  nProjectionDimensions;
 
 
 
-float   svdDrawRectX = 40;
+float   svdDrawRectX = 30;
 float   svdDrawRectY = 460;
 float   svdDrawRectW = 500;
 float   svdDrawRectH = 500;
